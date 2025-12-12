@@ -116,7 +116,7 @@ settle_date = date(2025, 12, 12)
 krw_tenors = [1, 2, 3, 4, 5, 7, 10]
 # IRS Par Swap Rate (예: 1Y=3.50%, 10Y=4.20%)
 # 실제 시장 데이터는 예금/FRA/IRS 등을 혼합하여 사용합니다.
-krw_swap_rates = [0.0350, 0.0370, 0.0385, 0.0395, 0.0405, 0.0415, 0.0420]
+krw_swap_rates = [0.03, 0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
 
 # 3. 부트스트래퍼 초기화 및 실행
 bootstrapper = KrwIrsBootstrapper(settle_date)
