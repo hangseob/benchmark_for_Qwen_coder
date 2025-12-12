@@ -1,5 +1,6 @@
 import math
 
+
 class KRWIRSCurve:
     def __init__(self, irs_quotes):
         self.irs_quotes = dict(sorted(irs_quotes.items()))
@@ -7,9 +8,6 @@ class KRWIRSCurve:
         self.zero_rates = {}
 
     def _interpolate_df(self, t):
-        """
-        Log-linear interpolation of discount factors
-        """
         tenors = sorted(self.discount_factors.keys())
 
         if t in self.discount_factors:
@@ -51,6 +49,20 @@ class KRWIRSCurve:
                 f"{self.discount_factors[t]:.6f} | "
                 f"{self.zero_rates[t]*100:.4f}%"
             )
-curve = KRWIRSCurve(irs_quotes)
-curve.bootstrap()
-curve.summary()
+
+
+if __name__ == "__main__":
+
+    # ✅ 반드시 정의되어야 함
+    irs_quotes = {
+        1: 0.0320,
+        2: 0.0335,
+        3: 0.0350,
+        5: 0.0365,
+        7: 0.0375,
+        10: 0.0380
+    }
+
+    curve = KRWIRSCurve(irs_quotes)
+    curve.bootstrap()
+    curve.summary()
