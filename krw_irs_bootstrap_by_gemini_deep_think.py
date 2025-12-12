@@ -4,37 +4,36 @@ from scipy.interpolate import interp1d
 
 class SimpleBootstrap:
     def __init__(self):
-        # [수정 1] 초기화 시점에 t=0, df=1.0을 추가하여 보간 에러 방지
-        self.times = [0.0]  # 시간축
-        self.discount_factors = [1.0]  # 할인계수축 (t=0일 때 1.0)
+        # 1. 보간(Interpolation)을 위한 기준점 초기화
+        # t=0 시점의 할인계수는 항상 1.0 (현재 가치 = 현재 가치)
+        self.times = [0.0]
+        self.discount_factors = [1.0]
 
-        # 결과 저장용 리스트 (0.0 시점 제외하고 실제 만기만 저장)
-        self.result_tenors = []
-        self.result_zeros = []
-        self.result_dfs = []
+        # 2. 결과 저장용 리스트
+        self.result_tenors = []  # 만기 (년)
+        self.result_market_rates = []  # 입력된 시장 금리 (Market Quote)
+        self.result_zeros = []  # 계산된 제로 금리
+        self.result_dfs = []  # 계산된 할인 계수
 
     def bootstrap(self, market_data):
         """
         :param market_data: list of tuples (Year, Rate)
-        Sorted by year e.g. [(0.25, 0.035), (1.0, 0.036)...]
         """
-        # 데이터 정렬
+        # 만기 순서대로 정렬 (중요)
         data = sorted(market_data, key=lambda x: x[0])
 
         for T_end, par_rate in data:
-            # 현금 흐름 주기 (KRW IRS 분기 지급 = 0.25년 가정)
+            # KRW IRS 현금 흐름 주기: 분기 지급 (0.25년) 가정
             dt = 0.25
 
-            # 0.25, 0.50, ... T_end 까지의 현금흐름 시점 생성
-            # np.arange는 부동소수점 오차가 있을 수 있어 epsilon 추가
+            # 현금 흐름 시점 생성 (예: 0.25, 0.50 ... T_end)
+            # floating point error 방지를 위해 약간의 여유값(0.001) 추가
             cashflow_times = np.arange(dt, T_end + 0.001, dt)
 
             sum_val = 0.0
 
-            # --- 보간 함수 생성 ---
-            # [수정 2] self.times에는 이미 (0.0, 1.0)과 이전 계산된 점들이 들어있음
-            # Log-Linear Interpolation: ln(DF)에 대해 선형 보간
-            # 점이 2개 이상이므로 interp1d가 정상 작동함
+            # --- 보간 함수 생성 (Log-Linear) ---
+            # self.times에는 항상 (0.0, 1.0)과 이전 계산된 점들이 포함되어 있음
             f_interp = interp1d(
                 self.times,
                 np.log(self.discount_factors),
@@ -42,49 +41,49 @@ class SimpleBootstrap:
                 fill_value="extrapolate"
             )
 
-            # 마지막 현금흐름(Tn)을 제외한 이전 현금흐름들의 가치 합산
+            # 마지막 현금흐름(만기일)을 제외한 중간 이자 지급액들의 현재 가치 합산
             for t in cashflow_times[:-1]:
-                # 보간된 DF 계산
                 df_t = np.exp(f_interp(t))
                 sum_val += df_t * dt
 
-            # --- 마지막 시점(Tn)의 DF 도출 ---
-            # 공식: DF_n = (1 - Rate * Sum(DF_prev * dt)) / (1 + Rate * dt)
+            # --- 부트스트랩 공식 ---
+            # DF_n = (1 - SwapRate * Sum(DF_prev * dt)) / (1 + SwapRate * dt)
             df_n = (1.0 - par_rate * sum_val) / (1.0 + par_rate * dt)
 
-            # --- 제로 금리 역산 (Continuous Compounding) ---
+            # --- 제로 금리 역산 (연속 복리) ---
             # ZeroRate = -ln(DF) / T
             zero_r = -np.log(df_n) / T_end
 
-            # [수정 3] 다음 루프의 보간을 위해 리스트에 추가
+            # [중요] 다음 만기 계산을 위해 현재 결과를 보간 기준점에 추가
             self.times.append(T_end)
             self.discount_factors.append(df_n)
 
-            # 결과 저장 (사용자 출력용)
+            # 결과 리스트에 저장
             self.result_tenors.append(T_end)
+            self.result_market_rates.append(par_rate)  # <--- 시장 금리 저장
             self.result_zeros.append(zero_r)
             self.result_dfs.append(df_n)
 
-        return self.result_tenors, self.result_zeros, self.result_dfs
+        return self.result_tenors, self.result_market_rates, self.result_zeros, self.result_dfs
 
 
-# --- 실행 예제 ---
+# --- 실행 및 출력 ---
 if __name__ == "__main__":
-    # (만기 년수, 금리)
+    # 입력 데이터: (만기 년수, 시장 금리)
     market_quotes = [
-        (0.25, 0.03),  # CD 91일
-        (0.50, 0.03),
         (1.00, 0.03),
-        (2.00, 0.03),
-        (3.00, 0.03),
-        (5.00, 0.03),
-        (10.0, 0.03)
+        (5.00, 0.04),
+        (10.0, 0.05)
     ]
 
     bootstrapper = SimpleBootstrap()
-    t, z, d = bootstrapper.bootstrap(market_quotes)
+    # 결과 반환값 4개 받기 (Tenor, MarketRate, ZeroRate, DF)
+    tenors, market_rates, zeros, dfs = bootstrapper.bootstrap(market_quotes)
 
-    print(f"{'Maturity(Y)':<12} | {'Zero Rate(%)':<15} | {'Discount Factor':<15}")
-    print("-" * 50)
-    for i in range(len(t)):
-        print(f"{t[i]:<12.2f} | {z[i] * 100:<15.4f} | {d[i]:<15.6f}")
+    # 출력 포맷 설정
+    header = f"{'Maturity(Y)':<12} | {'Mkt Rate(%)':<12} | {'Zero Rate(%)':<12} | {'Discount Factor':<15}"
+    print(header)
+    print("-" * len(header))
+
+    for i in range(len(tenors)):
+        print(f"{tenors[i]:<12.2f} | {market_rates[i] * 100:<12.2f} | {zeros[i] * 100:<12.4f} | {dfs[i]:<15.6f}")
